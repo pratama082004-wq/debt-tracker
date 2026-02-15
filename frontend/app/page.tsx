@@ -64,15 +64,18 @@ export default function Home() {
       <div className="max-w-md mx-auto">
         <h1 className="text-3xl font-bold mb-8 text-center text-blue-500">Debt Tracker Anak Kos</h1>
         
-        {/* Input Buat Grup */}
-        <div className="flex gap-2 mb-8 bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-700">
+        {/* Input Buat Grup - Responsif HP */}
+        <div className="flex flex-col sm:flex-row gap-2 mb-8 bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-700">
           <input 
             value={name} 
-            onChange={e=>setName(e.target.value)} 
-            className="flex-1 bg-gray-700 border border-gray-600 p-3 rounded text-white focus:outline-none focus:border-blue-500" 
+            onChange={e => setName(e.target.value)} 
+            className="w-full sm:flex-1 bg-gray-700 border border-gray-600 p-3 rounded text-white focus:outline-none focus:border-blue-500" 
             placeholder="Nama Grup Baru (misal: Kos Melati)" 
           />
-          <button onClick={createGroup} className="bg-blue-600 text-white px-6 rounded hover:bg-blue-700 transition font-bold">
+          <button 
+            onClick={createGroup} 
+            className="w-full sm:w-auto bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 transition font-bold"
+          >
             Buat
           </button>
         </div>

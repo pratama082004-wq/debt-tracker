@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Group } from "@/types";
 import { Trash2, Pencil } from "lucide-react";
-import { API_URL } from "@/lib/config"; // Import konfigurasi URL
+import API_URL from '@/lib/config'; // Import konfigurasi URL
 
 export default function Home() {
   const [groups, setGroups] = useState<Group[]>([]);

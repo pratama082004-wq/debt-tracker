@@ -6,6 +6,7 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
 from . import models, database
+from .database import get_db, engine  # <--- INI KUNCINYA (Import get_db)
 
 # --- Schemas ---
 class MemberCreate(BaseModel):
@@ -134,24 +135,28 @@ def update_group(group_id: UUID, group: GroupUpdate, db: Session = Depends(datab
     db.commit()
     return {"status": "ok"}
 
+# Perbaiki fungsi delete supaya otomatis bersih-bersih
 @app.delete("/groups/{group_id}")
-def delete_group(group_id: UUID, db: Session = Depends(database.get_db)):
+def delete_group(group_id: int, db: Session = Depends(get_db)):
+    # 1. Cari Grupnya
     db_group = db.query(models.Group).filter(models.Group.id == group_id).first()
-    if not db_group: raise HTTPException(404, "Group not found")
+    if db_group is None:
+        raise HTTPException(status_code=404, detail="Group not found")
     
-    # 1. Hapus Partisipan & Transaksi terkait
-    txs = db.query(models.Transaction).filter(models.Transaction.group_id == group_id).all()
-    for tx in txs:
-        db.query(models.TransactionParticipant).filter(models.TransactionParticipant.transaction_id == tx.id).delete()
-        db.delete(tx)
+    # 2. HAPUS DUIT/TRANSAKSI DULU (Penting!)
+    # Kita hapus semua transaksi yang ada di grup ini
+    db.query(models.Transaction).filter(models.Transaction.group_id == group_id).delete()
     
-    # 2. Hapus Member
+    # 3. HAPUS MEMBER DULU (Penting!)
+    # Kita hapus semua member yang ada di grup ini
     db.query(models.Member).filter(models.Member.group_id == group_id).delete()
-    
-    # 3. Hapus Group
+
+    # 4. BARU HAPUS GRUPNYA
+    # Sekarang grupnya sudah kosong, jadi aman dihapus
     db.delete(db_group)
     db.commit()
-    return {"status": "deleted"}
+    
+    return {"message": "Group and all its data deleted successfully"}
 
 # --- MEMBER ENDPOINTS ---
 @app.post("/groups/{group_id}/members/", response_model=MemberOut)

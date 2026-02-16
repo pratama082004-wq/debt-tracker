@@ -6,6 +6,7 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
 from . import models, database
+from sqlalchemy import delete
 
 # --- Schemas ---
 class MemberCreate(BaseModel):
@@ -135,23 +136,38 @@ def update_group(group_id: UUID, group: GroupUpdate, db: Session = Depends(datab
     return {"status": "ok"}
 
 @app.delete("/groups/{group_id}")
-def delete_group(group_id: UUID, db: Session = Depends(database.get_db)):
+def delete_group(group_id: int, db: Session = Depends(database.get_db)):
+    # 1. Cek apakah grupnya ada?
     db_group = db.query(models.Group).filter(models.Group.id == group_id).first()
-    if not db_group: raise HTTPException(404, "Group not found")
+    if not db_group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    # --- MULAI BERSIH-BERSIH (DARI CUCU SAMPAI BAPAK) ---
+
+    # A. Hapus PARTICIPANT (Cucu)
+    # Kita cari semua Transaksi di grup ini, lalu hapus partisipannya
+    # (Ini cara paling aman biar ga ada data nyangkut)
+    transactions = db.query(models.Transaction).filter(models.Transaction.group_id == group_id).all()
+    transaction_ids = [t.id for t in transactions]
     
-    # 1. Hapus Partisipan & Transaksi terkait
-    txs = db.query(models.Transaction).filter(models.Transaction.group_id == group_id).all()
-    for tx in txs:
-        db.query(models.TransactionParticipant).filter(models.TransactionParticipant.transaction_id == tx.id).delete()
-        db.delete(tx)
-    
-    # 2. Hapus Member
-    db.query(models.Member).filter(models.Member.group_id == group_id).delete()
-    
-    # 3. Hapus Group
+    if transaction_ids:
+        db.query(models.TransactionParticipant).filter(
+            models.TransactionParticipant.transaction_id.in_(transaction_ids)
+        ).delete(synchronize_session=False)
+
+    # B. Hapus TRANSAKSI (Anak 1)
+    db.query(models.Transaction).filter(models.Transaction.group_id == group_id).delete(synchronize_session=False)
+
+    # C. Hapus MEMBER (Anak 2)
+    db.query(models.Member).filter(models.Member.group_id == group_id).delete(synchronize_session=False)
+
+    # D. Hapus GRUP (Bapak)
     db.delete(db_group)
+    
+    # E. SIMPAN PERUBAHAN
     db.commit()
-    return {"status": "deleted"}
+    
+    return {"status": "deleted", "message": f"Group {db_group.name} dan seluruh isinya sudah dihapus permanen."}
 
 # --- MEMBER ENDPOINTS ---
 @app.post("/groups/{group_id}/members/", response_model=MemberOut)

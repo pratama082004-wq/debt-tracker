@@ -134,35 +134,24 @@ def update_group(group_id: UUID, group: GroupUpdate, db: Session = Depends(datab
     db.commit()
     return {"status": "ok"}
 
-# --- GANTI FUNGSI DELETE DENGAN INI ---
 @app.delete("/groups/{group_id}")
-def delete_group(group_id: int, db: Session = Depends(database.get_db)):
-    # 1. Cari Grupnya dulu
+def delete_group(group_id: UUID, db: Session = Depends(database.get_db)):
     db_group = db.query(models.Group).filter(models.Group.id == group_id).first()
-    if db_group is None:
-        raise HTTPException(status_code=404, detail="Group not found")
+    if not db_group: raise HTTPException(404, "Group not found")
     
-    try:
-        # 2. HAPUS TRANSAKSI (Anak Cucu)
-        # Kita hapus semua duit/transaksi yang nempel di grup ini
-        db.query(models.Transaction).filter(models.Transaction.group_id == group_id).delete(synchronize_session=False)
-        
-        # 3. HAPUS MEMBER (Anak)
-        # Kita hapus semua orang yang nempel di grup ini
-        db.query(models.Member).filter(models.Member.group_id == group_id).delete(synchronize_session=False)
-
-        # 4. HAPUS GRUP (Bapak)
-        # Sekarang grup sudah sebatang kara, jadi aman dihapus
-        db.delete(db_group)
-        
-        # 5. SIMPAN PERUBAHAN
-        db.commit()
-        return {"message": f"Group '{db_group.name}' berhasil dihapus bersih!"}
-
-    except Exception as e:
-        db.rollback() # Batalin kalau ada error
-        print(f"Error saat menghapus: {e}")
-        raise HTTPException(status_code=500, detail=f"Gagal menghapus grup: {str(e)}")
+    # 1. Hapus Partisipan & Transaksi terkait
+    txs = db.query(models.Transaction).filter(models.Transaction.group_id == group_id).all()
+    for tx in txs:
+        db.query(models.TransactionParticipant).filter(models.TransactionParticipant.transaction_id == tx.id).delete()
+        db.delete(tx)
+    
+    # 2. Hapus Member
+    db.query(models.Member).filter(models.Member.group_id == group_id).delete()
+    
+    # 3. Hapus Group
+    db.delete(db_group)
+    db.commit()
+    return {"status": "deleted"}
 
 # --- MEMBER ENDPOINTS ---
 @app.post("/groups/{group_id}/members/", response_model=MemberOut)

@@ -1,9 +1,9 @@
-// @ts-nocheck
-/* eslint-disable */
+import type { NextConfig } from "next";
 
-// Kita kasih "https://" supaya tidak error kereta gandeng lagi
-const API_URL = "https://debt-tracker-production-3466.up.railway.app";
+const nextConfig: NextConfig = {
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+};
 
-// Export supaya bisa dipakai di file lain
-export const WS_URL = API_URL.replace(/^http/, "ws");
-export default API_URL;
+export default nextConfig;

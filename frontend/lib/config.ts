@@ -1,9 +1,8 @@
-import type { NextConfig } from "next";
+// FILE: frontend/lib/config.ts
+// (Isinya ALAMAT RAILWAY)
 
-const nextConfig: NextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-};
+const API_URL = "https://debt-tracker-production-3466.up.railway.app";
 
-export default nextConfig;
+export const WS_URL = API_URL.replace(/^http/, "ws");
+export { API_URL };
+export default API_URL;

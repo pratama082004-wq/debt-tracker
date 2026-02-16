@@ -90,6 +90,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 2. Halaman Depan untuk Health Check (Supaya Railway ga matikan server)
+@app.get("/")
+def read_root():
+    return {"status": "Backend is running!", "message": "Hello from Railway"}
+# --- SAMPAI SINI ---
+
+# ... (sisa kodingan lama kamu di bawah sini biarin aja)
+
 # --- Helper Broadcast ---
 async def broadcast_group(group_id):
     await manager.broadcast(str(group_id))

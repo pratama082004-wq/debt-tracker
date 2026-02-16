@@ -134,25 +134,35 @@ def update_group(group_id: UUID, group: GroupUpdate, db: Session = Depends(datab
     db.commit()
     return {"status": "ok"}
 
+# --- GANTI FUNGSI DELETE DENGAN INI ---
 @app.delete("/groups/{group_id}")
 def delete_group(group_id: int, db: Session = Depends(database.get_db)):
-    # 1. Cari Grupnya
+    # 1. Cari Grupnya dulu
     db_group = db.query(models.Group).filter(models.Group.id == group_id).first()
     if db_group is None:
         raise HTTPException(status_code=404, detail="Group not found")
     
-    # 2. BERSIH-BERSIH DUIT & MEMBER (Penting!)
-    # Hapus semua transaksi di grup ini
-    db.query(models.Transaction).filter(models.Transaction.group_id == group_id).delete(synchronize_session=False)
-    
-    # Hapus semua member di grup ini
-    db.query(models.Member).filter(models.Member.group_id == group_id).delete(synchronize_session=False)
+    try:
+        # 2. HAPUS TRANSAKSI (Anak Cucu)
+        # Kita hapus semua duit/transaksi yang nempel di grup ini
+        db.query(models.Transaction).filter(models.Transaction.group_id == group_id).delete(synchronize_session=False)
+        
+        # 3. HAPUS MEMBER (Anak)
+        # Kita hapus semua orang yang nempel di grup ini
+        db.query(models.Member).filter(models.Member.group_id == group_id).delete(synchronize_session=False)
 
-    # 3. BARU HAPUS GRUPNYA
-    db.delete(db_group)
-    db.commit()
-    
-    return {"message": "Group and all its data deleted successfully"}
+        # 4. HAPUS GRUP (Bapak)
+        # Sekarang grup sudah sebatang kara, jadi aman dihapus
+        db.delete(db_group)
+        
+        # 5. SIMPAN PERUBAHAN
+        db.commit()
+        return {"message": f"Group '{db_group.name}' berhasil dihapus bersih!"}
+
+    except Exception as e:
+        db.rollback() # Batalin kalau ada error
+        print(f"Error saat menghapus: {e}")
+        raise HTTPException(status_code=500, detail=f"Gagal menghapus grup: {str(e)}")
 
 # --- MEMBER ENDPOINTS ---
 @app.post("/groups/{group_id}/members/", response_model=MemberOut)

@@ -8,40 +8,35 @@ from datetime import datetime
 from . import models, database
 
 # --- Schemas ---
-class MemberCreate(BaseModel): name: str
-class MemberUpdate(BaseModel): name: str 
+class MemberCreate(BaseModel):
+    name: str
 
-class MemberOut(BaseModel): 
+class MemberUpdate(BaseModel):
+    name: str 
+
+class MemberOut(BaseModel):
     id: UUID
     name: str
-    class Config: from_attributes = True
+    class Config:
+        from_attributes = True
 
 class ParticipantOut(BaseModel):
     id: UUID
     member_id: UUID
     member_name: Optional[str] = None
     is_paid: bool
-    class Config: from_attributes = True
+    class Config:
+        from_attributes = True
 
 class TransactionCreate(BaseModel):
     payer_id: UUID
     description: str
     amount: float
 
-# ... (kode sebelumnya)
-
-class TransactionCreate(BaseModel):
-    payer_id: UUID
-    description: str
-    amount: float
-
-# NEW: Schema untuk Update Transaksi
 class TransactionUpdate(BaseModel):
     payer_id: UUID
     description: str
     amount: float
-
-# ... (kode seterusnya)
 
 class TransactionOut(BaseModel):
     id: UUID
@@ -51,52 +46,64 @@ class TransactionOut(BaseModel):
     amount: float
     date: datetime
     participants: List[ParticipantOut] = []
-    class Config: from_attributes = True
+    class Config:
+        from_attributes = True
 
-class GroupCreate(BaseModel): name: str
-class GroupUpdate(BaseModel): name: str # Schema baru untuk edit grup
+class GroupCreate(BaseModel):
+    name: str
+
+class GroupUpdate(BaseModel):
+    name: str
 
 class GroupOut(BaseModel):
     id: UUID
     name: str
     members: List[MemberOut] = []
-    class Config: from_attributes = True
+    class Config:
+        from_attributes = True
 
 # --- Manager WebSocket ---
 class ConnectionManager:
-    def __init__(self): self.active_connections = {}
+    def __init__(self):
+        self.active_connections = {}
+
     async def connect(self, ws: WebSocket, group_id: str):
         await ws.accept()
-        if group_id not in self.active_connections: self.active_connections[group_id] = []
+        if group_id not in self.active_connections:
+            self.active_connections[group_id] = []
         self.active_connections[group_id].append(ws)
+
     def disconnect(self, ws: WebSocket, group_id: str):
-        if group_id in self.active_connections: self.active_connections[group_id].remove(ws)
+        if group_id in self.active_connections:
+            if ws in self.active_connections[group_id]:
+                self.active_connections[group_id].remove(ws)
+
     async def broadcast(self, group_id: str):
         if group_id in self.active_connections:
             for c in self.active_connections[group_id]:
-                try: await c.send_text("update")
-                except: pass
+                try:
+                    await c.send_text("update")
+                except:
+                    pass
 
 manager = ConnectionManager()
 models.Base.metadata.create_all(bind=database.engine)
+
 app = FastAPI()
 
-# GANTI BAGIAN INI:
+# --- CORS & HEALTH CHECK (PENTING BUAT RAILWAY & VERCEL) ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Bintang artinya boleh diakses dari mana saja (termasuk Vercel)
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 2. Halaman Depan untuk Health Check (Supaya Railway ga matikan server)
 @app.get("/")
 def read_root():
     return {"status": "Backend is running!", "message": "Hello from Railway"}
-# --- SAMPAI SINI ---
-
-# ... (sisa kodingan lama kamu di bawah sini biarin aja)
+# -----------------------------------------------------------
 
 # --- Helper Broadcast ---
 async def broadcast_group(group_id):
@@ -106,7 +113,9 @@ async def broadcast_group(group_id):
 @app.post("/groups/", response_model=GroupOut)
 def create_group(group: GroupCreate, db: Session = Depends(database.get_db)):
     db_group = models.Group(name=group.name)
-    db.add(db_group); db.commit(); db.refresh(db_group)
+    db.add(db_group)
+    db.commit()
+    db.refresh(db_group)
     return db_group
 
 @app.get("/groups/", response_model=List[GroupOut])
@@ -117,7 +126,6 @@ def get_groups(db: Session = Depends(database.get_db)):
 def get_group(group_id: UUID, db: Session = Depends(database.get_db)):
     return db.query(models.Group).options(joinedload(models.Group.members)).filter(models.Group.id == group_id).first()
 
-# NEW: Edit Group Name
 @app.put("/groups/{group_id}")
 def update_group(group_id: UUID, group: GroupUpdate, db: Session = Depends(database.get_db)):
     db_group = db.query(models.Group).filter(models.Group.id == group_id).first()
@@ -126,7 +134,6 @@ def update_group(group_id: UUID, group: GroupUpdate, db: Session = Depends(datab
     db.commit()
     return {"status": "ok"}
 
-# NEW: Delete Group (Complete Cleanup)
 @app.delete("/groups/{group_id}")
 def delete_group(group_id: UUID, db: Session = Depends(database.get_db)):
     db_group = db.query(models.Group).filter(models.Group.id == group_id).first()
@@ -138,7 +145,7 @@ def delete_group(group_id: UUID, db: Session = Depends(database.get_db)):
         db.query(models.TransactionParticipant).filter(models.TransactionParticipant.transaction_id == tx.id).delete()
         db.delete(tx)
     
-    # 2. Hapus Member (manual delete agar lebih aman)
+    # 2. Hapus Member
     db.query(models.Member).filter(models.Member.group_id == group_id).delete()
     
     # 3. Hapus Group
@@ -150,7 +157,9 @@ def delete_group(group_id: UUID, db: Session = Depends(database.get_db)):
 @app.post("/groups/{group_id}/members/", response_model=MemberOut)
 async def add_member(group_id: UUID, member: MemberCreate, db: Session = Depends(database.get_db)):
     db_mem = models.Member(name=member.name, group_id=group_id)
-    db.add(db_mem); db.commit(); db.refresh(db_mem)
+    db.add(db_mem)
+    db.commit()
+    db.refresh(db_mem)
     await broadcast_group(group_id)
     return db_mem
 
@@ -177,11 +186,14 @@ async def delete_member(member_id: UUID, db: Session = Depends(database.get_db))
 @app.post("/groups/{group_id}/transactions/", response_model=TransactionOut)
 async def add_transaction(group_id: UUID, tx: TransactionCreate, db: Session = Depends(database.get_db)):
     db_tx = models.Transaction(group_id=group_id, payer_id=tx.payer_id, description=tx.description, amount=tx.amount)
-    db.add(db_tx); db.flush()
+    db.add(db_tx)
+    db.flush()
     
     members = db.query(models.Member).filter(models.Member.group_id == group_id).all()
     parts = [models.TransactionParticipant(transaction_id=db_tx.id, member_id=m.id) for m in members if m.id != tx.payer_id]
-    db.add_all(parts); db.commit(); db.refresh(db_tx)
+    db.add_all(parts)
+    db.commit()
+    db.refresh(db_tx)
     
     await broadcast_group(group_id)
     return db_tx
@@ -198,26 +210,17 @@ async def delete_transaction(transaction_id: UUID, db: Session = Depends(databas
     await broadcast_group(group_id)
     return {"status": "deleted"}
 
-# ... (kode endpoints lainnya)
-
-# NEW: Edit Transaction
 @app.put("/transactions/{transaction_id}")
 async def update_transaction(transaction_id: UUID, tx: TransactionUpdate, db: Session = Depends(database.get_db)):
-    # 1. Ambil data transaksi lama
     db_tx = db.query(models.Transaction).filter(models.Transaction.id == transaction_id).first()
     if not db_tx: raise HTTPException(404, "Transaction not found")
     
-    # 2. Update Header Transaksi
     db_tx.description = tx.description
     db_tx.amount = tx.amount
     db_tx.payer_id = tx.payer_id
     
-    # 3. RESET Partisipan (Hapus lama, buat baru)
-    # Kita harus reset karena jika nominal berubah, hutang berubah.
-    # Jika pembayar berubah, daftar pengutang juga berubah.
     db.query(models.TransactionParticipant).filter(models.TransactionParticipant.transaction_id == transaction_id).delete()
     
-    # 4. Buat Partisipan Baru
     members = db.query(models.Member).filter(models.Member.group_id == db_tx.group_id).all()
     parts = [models.TransactionParticipant(transaction_id=db_tx.id, member_id=m.id) for m in members if m.id != tx.payer_id]
     
@@ -226,8 +229,6 @@ async def update_transaction(transaction_id: UUID, tx: TransactionUpdate, db: Se
     
     await broadcast_group(db_tx.group_id)
     return {"status": "updated"}
-
-# ... (kode endpoints delete dsb)
 
 @app.get("/groups/{group_id}/transactions/", response_model=List[TransactionOut])
 def get_transactions(group_id: UUID, db: Session = Depends(database.get_db)):
@@ -246,7 +247,8 @@ def get_transactions(group_id: UUID, db: Session = Depends(database.get_db)):
 async def toggle_pay(pid: UUID, is_paid: bool, db: Session = Depends(database.get_db)):
     part = db.query(models.TransactionParticipant).filter(models.TransactionParticipant.id == pid).first()
     if part:
-        part.is_paid = is_paid; db.commit()
+        part.is_paid = is_paid
+        db.commit()
         gid = part.transaction.group_id
         await broadcast_group(gid)
     return {"status": "ok"}
@@ -255,5 +257,7 @@ async def toggle_pay(pid: UUID, is_paid: bool, db: Session = Depends(database.ge
 async def ws_endpoint(websocket: WebSocket, group_id: str):
     await manager.connect(websocket, group_id)
     try: 
-        while True: await websocket.receive_text()
-    except: manager.disconnect(websocket, group_id)
+        while True:
+            await websocket.receive_text()
+    except:
+        manager.disconnect(websocket, group_id)
